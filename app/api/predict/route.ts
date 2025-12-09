@@ -65,8 +65,16 @@ export async function POST(request: NextRequest) {
     // RAG: Find exact matching past feedback for context
     const exactMatches = await findExactMatchingFeedback(review_text)
 
+    type CorrectionPattern = {
+      original_prediction: number
+      corrected_to: number
+      error_type: 'over_rated' | 'under_rated' | 'accurate'
+      error_magnitude: number
+      similarity: number
+    }
+
     // Analyze patterns from exact matching feedback
-    const correctionPatterns = exactMatches.map((f: any) => {
+    const correctionPatterns: CorrectionPattern[] = exactMatches.map((f: any) => {
       const error = f.predicted_rating - f.user_rating
       return {
         original_prediction: f.predicted_rating,

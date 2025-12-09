@@ -238,7 +238,7 @@ export default function UserDashboard() {
                     </div>
                     <div className="mt-3">
                       <p className="text-xs text-purple-600 mb-2">
-                        This exact review has been corrected {result.similar_cases_found} time{result.similar_cases_found > 1 ? 's' : ''} before
+                        This exact review has been corrected {result.similar_cases_found || 0} time{(result.similar_cases_found || 0) > 1 ? 's' : ''} before
                       </p>
                       <div className="space-y-2">
                         <p className="text-xs font-medium text-purple-700">Previous Corrections:</p>

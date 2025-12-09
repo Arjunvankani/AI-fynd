@@ -154,8 +154,8 @@ Return ONLY a JSON object:
         console.log(`🔄 Generating AI summary and recommendations at submission time for ${isAdminFeedback ? 'ADMIN' : 'USER'} feedback...`)
         
         // Call internal summarize function - this runs immediately on feedback submission
-        const summarizeModule = await import('../summarize/route')
-        const summarizeData = await summarizeModule.generateSummary({
+        const { generateSummary } = await import('../../../lib/summarize')
+        const summarizeData = await generateSummary({
           review_text,
           user_rating,
           predicted_rating: finalPredictedRating || user_rating,
@@ -262,8 +262,8 @@ export async function PUT(request: NextRequest) {
     // If regenerating summary/actions, call API
     if (updates.regenerate_summary) {
       try {
-        const summarizeModule = await import('../summarize/route')
-        const summarizeData = await summarizeModule.generateSummary({
+        const { generateSummary } = await import('../../../lib/summarize')
+        const summarizeData = await generateSummary({
           review_text: feedback[index].review_text,
           user_rating: updates.user_rating || feedback[index].user_rating,
           predicted_rating: updates.predicted_rating || feedback[index].predicted_rating,

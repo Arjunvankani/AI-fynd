@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     const feedback = await readFeedback()
     
     // Import summarize function
-    const { generateSummary } = await import('../summarize/route')
+    const { generateSummary } = await import('../../../lib/summarize')
     
     let updated = 0
     let errors = 0

@@ -50,8 +50,16 @@ export async function POST(request: NextRequest) {
     // Find similar past feedback
     const similarFeedback = await findSimilarFeedback(review_text)
 
+    type CorrectionPattern = {
+      original_prediction: number
+      corrected_to: number
+      error_type: 'over_rated' | 'under_rated' | 'accurate'
+      error_magnitude: number
+      similarity: number
+    }
+
     // Analyze patterns from similar feedback
-    const correctionPatterns = similarFeedback.map((f: any) => {
+    const correctionPatterns: CorrectionPattern[] = similarFeedback.map((f: any) => {
       const error = f.predicted_rating - f.user_rating
       return {
         original_prediction: f.predicted_rating,
