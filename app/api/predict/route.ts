@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = process.env.GEMINI_API_KEY
-    const modelName = process.env.MODEL_NAME || 'gemini-1.5-flash'
+    const modelName = process.env.MODEL_NAME || 'gemini-pro'
 
     if (!apiKey) {
       console.error('GEMINI_API_KEY environment variable is not set')
@@ -259,7 +259,7 @@ Return ONLY a JSON object:
           'Check API Key': 'Ensure GEMINI_API_KEY is set in .env.local',
           'Check Internet': 'Verify your internet connection is working',
           'Check Quota': 'Verify your Gemini API quota is not exceeded',
-          'Check Model': `Current model: ${process.env.MODEL_NAME || 'gemini-1.5-flash'}`
+          'Check Model': `Current model: ${process.env.MODEL_NAME || 'gemini-pro'}`
         }
       },
       { status: statusCode }
