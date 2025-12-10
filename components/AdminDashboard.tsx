@@ -62,6 +62,7 @@ export default function AdminDashboard() {
   const [editForm, setEditForm] = useState<Partial<FeedbackData>>({})
   const [isFetching, setIsFetching] = useState(false)
   const [timePeriod, setTimePeriod] = useState<'minute' | 'hour' | 'day' | 'week' | 'month'>('hour')
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
 
   const fetchData = async (showProgress = true) => {
     // Prevent duplicate requests
@@ -90,6 +91,7 @@ export default function AdminDashboard() {
       setAnalytics(analyticsRes.data.analytics || null)
 
       console.log(`📊 [DASHBOARD] Set analytics:`, analyticsRes.data.analytics)
+      setLastUpdated(new Date())
     } catch (err) {
       console.error('Failed to fetch data:', err)
     } finally {
@@ -99,13 +101,17 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => {
-    // Only fetch once on mount - no auto-refresh
-    let mounted = true
-    if (mounted) {
-      fetchData()
-    }
+    // Initial data fetch
+    fetchData()
+
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      console.log('🔄 [DASHBOARD] Auto-refreshing analytics...')
+      fetchData(false) // Don't show loading state for auto-refresh
+    }, 30000) // 30 seconds
+
     return () => {
-      mounted = false
+      clearInterval(interval)
     }
   }, [])
 
@@ -270,7 +276,10 @@ export default function AdminDashboard() {
             Monitor feedback, analyze patterns, and prepare training data
           </p>
         </div>
-        <div className="flex space-x-3">
+        <div className="flex items-center space-x-4">
+          <div className="text-sm text-gray-500">
+            Last updated: {lastUpdated.toLocaleTimeString()}
+          </div>
           <button
             onClick={() => fetchData()}
             disabled={isFetching}
