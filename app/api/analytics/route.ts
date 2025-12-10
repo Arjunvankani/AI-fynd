@@ -1,35 +1,27 @@
 import { NextResponse } from 'next/server'
 import fs from 'fs/promises'
 import path from 'path'
+import { kv } from '@vercel/kv'
 
 const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
 
-// Check if we're in a serverless environment (Vercel, Netlify, etc.)
-const IS_SERVERLESS = process.env.VERCEL || process.env.NETLIFY || !process.cwd().includes('Desktop')
-
-// In-memory storage for serverless environments - import from feedback memory
-// This is a workaround since we can't share memory between routes in serverless
-let analyticsMemoryStorage: any[] = []
+// Check if Vercel KV is available (for production data persistence)
+const USE_KV = process.env.KV_URL && process.env.KV_REST_API_URL
 
 async function readFeedback(): Promise<any[]> {
-  if (IS_SERVERLESS) {
-    // Try to read from /tmp first (written by feedback route)
+  if (USE_KV) {
     try {
-      const tmpFile = '/tmp/feedback-data.json'
-      const data = await fs.readFile(tmpFile, 'utf-8')
-      const feedback = JSON.parse(data)
-      console.log(`[SERVERLESS] Analytics loaded ${feedback.length} entries from ${tmpFile}`)
-      return feedback
-    } catch (tmpError) {
-      console.log('[SERVERLESS] Could not read from /tmp, trying in-memory storage')
+      console.log('[KV] Analytics reading feedback from Vercel KV')
+      const feedback = await kv.get('feedback_data') || []
+      console.log(`[KV] Analytics retrieved ${Array.isArray(feedback) ? feedback.length : 0} feedback entries`)
+      return Array.isArray(feedback) ? feedback : []
+    } catch (error) {
+      console.error('[KV] Analytics error reading from KV:', error)
+      return []
     }
-
-    // Fallback: return empty array (serverless limitation)
-    console.log('[SERVERLESS] Analytics: No persistent storage available - dashboard will show empty data')
-    console.log('[SERVERLESS] For persistent data, consider using Vercel KV or a database')
-    return []
   }
 
+  // Fallback to file storage for local development
   try {
     const data = await fs.readFile(FEEDBACK_FILE, 'utf-8')
     return JSON.parse(data)

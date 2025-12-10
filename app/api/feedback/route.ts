@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs/promises'
 import path from 'path'
+import { kv } from '@vercel/kv'
 
 interface FeedbackRequest {
   prediction_id?: string  // Optional for admin submissions
@@ -16,15 +17,15 @@ interface FeedbackRequest {
 
 const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
 
-// Check if we're in a serverless environment (Vercel, Netlify, etc.)
-const IS_SERVERLESS = process.env.VERCEL || process.env.NETLIFY || !process.cwd().includes('Desktop')
+// Check if Vercel KV is available (for production data persistence)
+const USE_KV = process.env.KV_URL && process.env.KV_REST_API_URL
 
-// In-memory storage for serverless environments
+// Fallback in-memory storage (only for development/testing)
 let memoryStorage: any[] = []
 
 // Ensure data directory exists (only for local development)
 async function ensureDataDir() {
-  if (IS_SERVERLESS) return // Skip in serverless environments
+  if (USE_KV) return // Skip when using KV storage
 
   const dataDir = path.join(process.cwd(), 'data')
   try {
@@ -35,12 +36,19 @@ async function ensureDataDir() {
 }
 
 async function readFeedback(): Promise<any[]> {
-  if (IS_SERVERLESS) {
-    // Use in-memory storage for serverless
-    console.log('[SERVERLESS] Using in-memory storage for feedback')
-    return memoryStorage
+  if (USE_KV) {
+    try {
+      console.log('[KV] Reading feedback from Vercel KV')
+      const feedback = await kv.get('feedback_data') || []
+      console.log(`[KV] Retrieved ${Array.isArray(feedback) ? feedback.length : 0} feedback entries`)
+      return Array.isArray(feedback) ? feedback : []
+    } catch (error) {
+      console.error('[KV] Error reading from KV:', error)
+      return []
+    }
   }
 
+  // Fallback to file storage for local development
   try {
     await ensureDataDir()
     const data = await fs.readFile(FEEDBACK_FILE, 'utf-8')
@@ -51,28 +59,25 @@ async function readFeedback(): Promise<any[]> {
 }
 
 async function writeFeedback(feedback: any[]) {
-  if (IS_SERVERLESS) {
-    // Use in-memory storage for serverless
-    memoryStorage = feedback
-    console.log(`[SERVERLESS] Stored ${feedback.length} feedback entries in memory`)
-
-    // Also try to write to /tmp for cross-route persistence (limited but better than nothing)
+  if (USE_KV) {
     try {
-      const tmpFile = '/tmp/feedback-data.json'
-      await fs.writeFile(tmpFile, JSON.stringify(feedback), 'utf-8')
-      console.log(`[SERVERLESS] Also persisted to ${tmpFile} for cross-route access`)
-    } catch (tmpError) {
-      console.log('[SERVERLESS] Could not write to /tmp (normal in some serverless environments)')
+      console.log(`[KV] Writing ${feedback.length} feedback entries to Vercel KV`)
+      await kv.set('feedback_data', feedback)
+      console.log('[KV] Successfully stored feedback in Vercel KV')
+      return
+    } catch (error) {
+      console.error('[KV] Error writing to KV:', error)
+      throw error
     }
-    return
   }
 
+  // Fallback to file storage for local development
   try {
     await ensureDataDir()
     await fs.writeFile(FEEDBACK_FILE, JSON.stringify(feedback, null, 2), 'utf-8')
-    console.log(`Successfully wrote ${feedback.length} feedback entries to file`)
+    console.log(`[FILE] Successfully wrote ${feedback.length} feedback entries to file`)
   } catch (error) {
-    console.error('Error writing feedback file:', error)
+    console.error('[FILE] Error writing feedback file:', error)
     throw error
   }
 }

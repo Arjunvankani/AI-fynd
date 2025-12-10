@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs/promises'
 import path from 'path'
+import { kv } from '@vercel/kv'
 
 const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
 const TRAINING_FILE = path.join(process.cwd(), 'data', 'training_data.json')
 
-// Check if we're in a serverless environment (Vercel, Netlify, etc.)
-const IS_SERVERLESS = process.env.VERCEL || process.env.NETLIFY || !process.cwd().includes('Desktop')
+// Check if Vercel KV is available (for production data persistence)
+const USE_KV = process.env.KV_URL && process.env.KV_REST_API_URL
 
-// In-memory storage for serverless environments
+// Fallback in-memory storage (only for development/testing)
 let trainingMemoryStorage: any[] = []
 
 interface TrainRequest {
@@ -16,7 +17,7 @@ interface TrainRequest {
 }
 
 async function ensureDataDir() {
-  if (IS_SERVERLESS) return // Skip in serverless environments
+  if (USE_KV) return // Skip when using KV storage
 
   const dataDir = path.join(process.cwd(), 'data')
   try {
@@ -27,13 +28,19 @@ async function ensureDataDir() {
 }
 
 async function readFeedback(): Promise<any[]> {
-  if (IS_SERVERLESS) {
-    // Import feedback from memory storage (this is a limitation in serverless)
-    // In production, you'd want to use a shared database
-    console.log('[SERVERLESS] Cannot read feedback from file in serverless environment')
-    return []
+  if (USE_KV) {
+    try {
+      console.log('[KV] Train reading feedback from Vercel KV')
+      const feedback = await kv.get('feedback_data') || []
+      console.log(`[KV] Train retrieved ${Array.isArray(feedback) ? feedback.length : 0} feedback entries`)
+      return Array.isArray(feedback) ? feedback : []
+    } catch (error) {
+      console.error('[KV] Train error reading feedback from KV:', error)
+      return []
+    }
   }
 
+  // Fallback to file storage for local development
   try {
     await ensureDataDir()
     const data = await fs.readFile(FEEDBACK_FILE, 'utf-8')
@@ -44,11 +51,19 @@ async function readFeedback(): Promise<any[]> {
 }
 
 async function readTrainingData(): Promise<any[]> {
-  if (IS_SERVERLESS) {
-    console.log('[SERVERLESS] Using in-memory storage for training data')
-    return trainingMemoryStorage
+  if (USE_KV) {
+    try {
+      console.log('[KV] Reading training data from Vercel KV')
+      const trainingData = await kv.get('training_data') || []
+      console.log(`[KV] Retrieved ${Array.isArray(trainingData) ? trainingData.length : 0} training entries`)
+      return Array.isArray(trainingData) ? trainingData : []
+    } catch (error) {
+      console.error('[KV] Error reading training data from KV:', error)
+      return []
+    }
   }
 
+  // Fallback to file storage for local development
   try {
     await ensureDataDir()
     const data = await fs.readFile(TRAINING_FILE, 'utf-8')
@@ -59,18 +74,25 @@ async function readTrainingData(): Promise<any[]> {
 }
 
 async function writeTrainingData(data: any[]) {
-  if (IS_SERVERLESS) {
-    trainingMemoryStorage = data
-    console.log(`[SERVERLESS] Stored ${data.length} training entries in memory`)
-    return
+  if (USE_KV) {
+    try {
+      console.log(`[KV] Writing ${data.length} training entries to Vercel KV`)
+      await kv.set('training_data', data)
+      console.log('[KV] Successfully stored training data in Vercel KV')
+      return
+    } catch (error) {
+      console.error('[KV] Error writing training data to KV:', error)
+      throw error
+    }
   }
 
+  // Fallback to file storage for local development
   try {
     await ensureDataDir()
     await fs.writeFile(TRAINING_FILE, JSON.stringify(data, null, 2))
-    console.log(`Successfully wrote ${data.length} training entries to file`)
+    console.log(`[FILE] Successfully wrote ${data.length} training entries to file`)
   } catch (error) {
-    console.error('Error writing training data file:', error)
+    console.error('[FILE] Error writing training data file:', error)
     throw error
   }
 }
