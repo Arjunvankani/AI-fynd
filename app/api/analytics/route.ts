@@ -4,7 +4,22 @@ import path from 'path'
 
 const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
 
+// Check if we're in a serverless environment (Vercel, Netlify, etc.)
+const IS_SERVERLESS = process.env.VERCEL || process.env.NETLIFY || !process.cwd().includes('Desktop')
+
+// In-memory storage for serverless environments - import from feedback memory
+// This is a workaround since we can't share memory between routes in serverless
+let analyticsMemoryStorage: any[] = []
+
 async function readFeedback(): Promise<any[]> {
+  if (IS_SERVERLESS) {
+    // In serverless, we can't share memory between routes, so analytics will be empty
+    // This is a limitation of serverless architectures
+    console.log('[SERVERLESS] Analytics: No persistent storage available in serverless environment')
+    console.log('[SERVERLESS] Dashboard will show empty analytics until feedback data is persisted')
+    return []
+  }
+
   try {
     const data = await fs.readFile(FEEDBACK_FILE, 'utf-8')
     return JSON.parse(data)

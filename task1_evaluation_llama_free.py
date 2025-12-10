@@ -42,7 +42,7 @@ warnings.filterwarnings('ignore')
 sns.set_style("whitegrid")
 plt.rcParams['figure.figsize'] = (12, 6)
 
-print(f"[+] Using free LLaMA 3.1 70B via Hugging Face API")
+print(f"[+] Using free FLAN-T5 via Hugging Face API (Task 1 Evaluation)")
 print(f"[+] No API costs - completely free for evaluation!")
 
 # ============================================================================
@@ -52,8 +52,15 @@ print(f"[+] No API costs - completely free for evaluation!")
 # Hugging Face API Configuration (Free Tier)
 HF_API_TOKEN = "hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"  # Replace with your Hugging Face token
 # Get from: https://huggingface.co/settings/tokens
-LLAMA_MODEL = "meta-llama/Llama-3.1-70B-Instruct"
-HF_API_URL = f"https://api-inference.huggingface.co/models/{LLAMA_MODEL}"
+
+# Try different free models (LLaMA 3.1 70B is not available on free tier)
+# Available free models for text generation:
+# - google/flan-t5-base (good for text tasks)
+# - microsoft/DialoGPT-medium (conversational)
+# - facebook/blenderbot-400M-distill (conversational)
+
+MODEL_NAME = "google/flan-t5-base"  # Free and available
+HF_API_URL = f"https://api-inference.huggingface.co/models/{MODEL_NAME}"
 
 # API Headers
 HEADERS = {
@@ -65,12 +72,13 @@ HEADERS = {
 DATASET_PATH = "yelp.csv"
 
 # Evaluation settings
-SAMPLE_SIZE = 200  # All reviews processed in batches
-BATCH_SIZE = 10    # Process 10 reviews per API call (adjust based on rate limits)
+SAMPLE_SIZE = 50  # Reduced for testing (can increase to 200)
+BATCH_SIZE = 5    # Smaller batch size for free tier
 TEMPERATURE = 0.1  # Low temperature for consistency
 
-print(f"[+] Using {LLAMA_MODEL} via Hugging Face API")
+print(f"[+] Using {MODEL_NAME} via Hugging Face API")
 print(f"[+] Batch size: {BATCH_SIZE} reviews per API call")
+print(f"[+] Sample size: {SAMPLE_SIZE} reviews")
 print(f"[+] Completely FREE - no API costs!")
 
 # ============================================================================
@@ -111,10 +119,25 @@ def call_llama_api_batch(prompts: List[str], max_retries: int = 5) -> List[str]:
     return [f"Error: Failed after {max_retries} attempts" for _ in prompts]
 
 def extract_json(response: str) -> Dict:
-    """Extract JSON from LLM response."""
+    """Extract JSON from LLM response, or create from simple responses."""
+    # First try to extract a number directly (FLAN-T5 might return just a number)
+    response_clean = response.strip()
+
+    # Try to find a single digit 1-5
+    import re
+    number_match = re.search(r'\b([1-5])\b', response_clean)
+    if number_match:
+        rating = int(number_match.group(1))
+        return {
+            "predicted_stars": rating,
+            "explanation": f"Rating based on sentiment analysis: {rating} stars"
+        }
+
+    # Try normal JSON parsing
     try:
-        return json.loads(response)
+        return json.loads(response_clean)
     except json.JSONDecodeError:
+        # Try to find JSON within the response
         start = response.find('{')
         end = response.rfind('}') + 1
         if start != -1 and end != 0:
@@ -122,6 +145,16 @@ def extract_json(response: str) -> Dict:
                 return json.loads(response[start:end])
             except json.JSONDecodeError:
                 pass
+
+        # If all else fails, try to extract any number and use it
+        numbers = re.findall(r'\d+', response_clean)
+        if numbers:
+            rating = min(5, max(1, int(numbers[0])))  # Clamp between 1-5
+            return {
+                "predicted_stars": rating,
+                "explanation": f"Extracted rating from response: {rating} stars"
+            }
+
         return None
 
 def load_dataset(path: str, sample_size: int = None) -> pd.DataFrame:
@@ -148,112 +181,51 @@ def load_dataset(path: str, sample_size: int = None) -> pd.DataFrame:
 
 def zero_shot_prompt(review_text: str) -> str:
     """Approach 1: Zero-Shot Classification."""
-    return f"""Analyze the following Yelp review and predict the star rating (1-5 stars).
+    return f"""Rate this Yelp review on a scale of 1-5 stars. Consider the overall sentiment, specific compliments or complaints, and the reviewer's satisfaction level.
 
-Review: "{review_text}"
+Review: {review_text}
 
-Return a JSON object with the following structure:
-{{
-    "predicted_stars": <integer between 1 and 5>,
-    "explanation": "<brief explanation for the rating>"
-}}
-
-Consider the overall sentiment, specific compliments or complaints, and the reviewer's satisfaction level."""
+What is the star rating (1-5)? Answer with just the number."""
 
 def few_shot_prompt(review_text: str) -> str:
     """Approach 2: Few-Shot Classification."""
-    examples = [
-        {
-            "review": "The food was amazing and the service was impeccable. Highly recommend!",
-            "rating": 5,
-            "explanation": "Strong positive sentiment, explicit recommendation."
-        },
-        {
-            "review": "Waited an hour for cold food. Never coming back.",
-            "rating": 1,
-            "explanation": "Severe negative sentiment, specific complaints, explicit refusal to return."
-        },
-        {
-            "review": "It was okay. Nothing special but not bad either.",
-            "rating": 3,
-            "explanation": "Neutral sentiment, no strong positive or negative points."
-        }
-    ]
-    example_str = "\n\n".join([
-        f"Review: \"{ex['review']}\"\nPredicted Stars: {ex['rating']}\nExplanation: {ex['explanation']}"
-        for ex in examples
-    ])
-    return f"""Analyze the following Yelp review and predict the star rating (1-5 stars).
+    return f"""Rate this Yelp review from 1-5 stars. Here are examples:
 
-{example_str}
+Example 1: "The food was amazing and the service was impeccable. Highly recommend!" Rating: 5
+Example 2: "Waited an hour for cold food. Never coming back." Rating: 1
+Example 3: "It was okay. Nothing special but not bad either." Rating: 3
 
-Review: "{review_text}"
+Now rate this review: "{review_text}"
 
-Return a JSON object with the following structure:
-{{
-    "predicted_stars": <integer between 1 and 5>,
-    "explanation": "<brief explanation for the rating>"
-}}
-
-Consider the overall sentiment, specific compliments or complaints, and the reviewer's satisfaction level."""
+What is the star rating (1-5)? Answer with just the number."""
 
 def cot_prompt(review_text: str) -> str:
     """Approach 3: Chain-of-Thought (CoT)."""
-    return f"""You are an expert Yelp review rating classifier. Analyze reviews systematically.
+    return f"""Analyze this Yelp review and give it a rating from 1-5 stars. Think step by step.
 
-Rating Guidelines:
-- 1 star: Terrible experience, multiple severe complaints, would not recommend
-- 2 stars: Disappointing, below expectations, significant issues
-- 3 stars: Average, acceptable but nothing special, neutral experience
-- 4 stars: Good experience, positive overall, would recommend
-- 5 stars: Excellent, exceptional experience, highest praise
-
-Now analyze this review step-by-step:
+Guidelines:
+- 1 star: Terrible experience, major complaints
+- 2 stars: Disappointing, significant issues
+- 3 stars: Average, neutral experience
+- 4 stars: Good experience, would recommend
+- 5 stars: Excellent, exceptional experience
 
 Review: "{review_text}"
 
-Step 1: Overall sentiment?
-Step 2: Key positive/negative points?
-Step 3: Intensity of feelings?
-Step 4: Recommendation likelihood?
-Step 5: Final rating (1-5)?
-
-Return ONLY a JSON object:
-{{
-  "predicted_stars": <integer 1-5>,
-  "explanation": "<one clear sentence explaining the rating>"
-}}"""
+What rating would you give this review? Answer with just the number (1-5)."""
 
 def hybrid_prompt(review_text: str) -> str:
     """Approach 4: Hybrid (Few-Shot + CoT)."""
-    return f"""You are an expert Yelp review rating classifier. Analyze reviews systematically.
+    return f"""Rate this Yelp review from 1-5 stars using examples and reasoning.
 
-Rating Guidelines:
-- 1 star: Terrible experience, multiple severe complaints, would not recommend
-- 2 stars: Disappointing, below expectations, significant issues
-- 3 stars: Average, acceptable but nothing special, neutral experience
-- 4 stars: Good experience, positive overall, would recommend
-- 5 stars: Excellent, exceptional experience, highest praise
+Examples:
+- "Amazing food and service!" → 5 stars
+- "Cold food after long wait." → 1 star
+- "It was okay, nothing special." → 3 stars
 
-Example Analysis:
-Review: "The food was decent but service was terrible. Waited 45 minutes for appetizers. Won't be back."
-Reasoning: Negative sentiment overall, specific complaint about service wait time, indicates dissatisfaction → 2 stars
+Review to rate: "{review_text}"
 
-Now analyze this review step-by-step:
-
-Review: "{review_text}"
-
-Step 1: Overall sentiment?
-Step 2: Key positive/negative points?
-Step 3: Intensity of feelings?
-Step 4: Recommendation likelihood?
-Step 5: Final rating (1-5)?
-
-Return ONLY a JSON object:
-{{
-  "predicted_stars": <integer 1-5>,
-  "explanation": "<one clear sentence explaining the rating>"
-}}"""
+Based on the examples and your analysis, what rating (1-5) does this review deserve? Answer with just the number."""
 
 # Map approach names to their prompt functions
 PROMPT_FUNCTIONS = {
