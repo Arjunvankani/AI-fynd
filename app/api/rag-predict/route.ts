@@ -121,13 +121,21 @@ Return ONLY a JSON object:
 }`
 
     const apiKey = process.env.GEMINI_API_KEY
-    let modelName = process.env.MODEL_NAME || 'gemini-pro'
+    let modelName = process.env.MODEL_NAME || 'gemini-2.0-flash-exp'
 
-    // Validate model name - only allow valid Gemini models
-    const validModels = ['gemini-pro', 'gemini-pro-vision', 'gemini-1.5-pro', 'gemini-1.5-flash']
+    // Validate model name - include newer Gemini models
+    const validModels = [
+      'gemini-pro',
+      'gemini-pro-vision',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash',
+      'gemini-2.0-flash-exp',
+      'gemini-2.0-flash-thinking-exp'
+    ]
+
     if (!validModels.includes(modelName)) {
-      console.warn(`Invalid model name: ${modelName}. Using gemini-pro instead.`)
-      modelName = 'gemini-pro'
+      console.warn(`Invalid model name: ${modelName}. Using gemini-2.0-flash-exp instead.`)
+      modelName = 'gemini-2.0-flash-exp'
     }
 
     if (!apiKey) {
@@ -137,7 +145,7 @@ Return ONLY a JSON object:
       )
     }
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`
 
     const response = await fetch(geminiUrl, {
       method: 'POST',

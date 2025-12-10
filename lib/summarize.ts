@@ -1,4 +1,4 @@
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1/models'
 
 interface SummarizeRequest {
   review_text: string

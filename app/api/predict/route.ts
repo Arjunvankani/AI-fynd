@@ -3,7 +3,14 @@ import { randomUUID } from 'crypto'
 import fs from 'fs/promises'
 import path from 'path'
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
+// API URL will be determined based on model
+function getApiUrl(modelName: string): string {
+  // Newer models might use different endpoints
+  if (modelName.includes('2.0') || modelName.includes('2.5')) {
+    return 'https://generativelanguage.googleapis.com/v1/models'
+  }
+  return 'https://generativelanguage.googleapis.com/v1beta/models'
+}
 const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
 
 // Exact match function - only return identical reviews
@@ -32,18 +39,42 @@ interface PredictionRequest {
   review_text: string
 }
 
-// Validate and get model name
+// Get model name with user's preference
 function getValidatedModelName(): string {
-  let modelName = process.env.MODEL_NAME || 'gemini-pro'
+  // User wants gemini-2.5-flash as default
+  let modelName = process.env.MODEL_NAME || 'gemini-2.5-flash'
 
-  // Validate model name - only allow valid Gemini models
-  const validModels = ['gemini-pro', 'gemini-pro-vision', 'gemini-1.5-pro', 'gemini-1.5-flash']
-  if (!validModels.includes(modelName)) {
-    console.warn(`Invalid model name: ${modelName}. Using gemini-pro instead.`)
-    modelName = 'gemini-pro'
+  // Allow user's preferred models
+  const allowedModels = [
+    'gemini-pro',
+    'gemini-pro-vision',
+    'gemini-1.5-pro',
+    'gemini-1.5-flash',
+    'gemini-2.0-flash-exp',
+    'gemini-2.0-flash-thinking-exp',
+    'gemini-2.5-flash',  // User's preferred
+    'gemini-2.5-pro'     // In case it exists
+  ]
+
+  if (!allowedModels.includes(modelName)) {
+    console.warn(`Model ${modelName} may not be available. Falling back to gemini-2.5-flash`)
+    modelName = 'gemini-2.5-flash'
   }
 
+  console.log(`Using Gemini model: ${modelName}`)
   return modelName
+}
+
+// Extract prediction from model response
+function extractPrediction(responseText: string): { stars: number; explanation: string } {
+  // Try to extract a number from the response
+  const numberMatch = responseText.match(/(\d+)/)
+  const stars = numberMatch ? Math.min(5, Math.max(1, parseInt(numberMatch[1]))) : 3
+
+  return {
+    stars,
+    explanation: responseText.length > 10 ? responseText : `Rating: ${stars} stars`
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -61,6 +92,9 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = process.env.GEMINI_API_KEY
+
+    console.log(`Using Gemini model: ${modelName}`)
+    console.log(`API Key present: ${!!apiKey}`)
 
     if (!apiKey) {
       console.error('GEMINI_API_KEY environment variable is not set')
@@ -157,7 +191,8 @@ Return ONLY a JSON object:
   "similar_cases": ${correctionPatterns.length}
 }`
 
-    const geminiUrl = `${GEMINI_API_URL}/${modelName}:generateContent?key=${apiKey}`
+    const apiUrl = getApiUrl(modelName)
+    const geminiUrl = `${apiUrl}/${modelName}:generateContent?key=${apiKey}`
 
     console.log(`Making request to: ${geminiUrl.replace(apiKey, '[API_KEY]')}`)
 
