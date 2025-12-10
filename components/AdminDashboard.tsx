@@ -75,16 +75,21 @@ export default function AdminDashboard() {
     const startTime = Date.now()
     
     try {
+      console.log('🔍 [DASHBOARD] Starting data fetch...')
+
       const [feedbackRes, analyticsRes] = await Promise.all([
         axios.get('/api/feedback'),
         axios.get(`/api/analytics?timePeriod=${timePeriod}`)
       ])
-      
+
       const fetchTime = Date.now() - startTime
-      console.log(`📊 Fetched ${feedbackRes.data.feedback?.length || 0} entries in ${fetchTime}ms`)
-      
+      console.log(`📊 [DASHBOARD] Fetched ${feedbackRes.data.feedback?.length || 0} feedback entries in ${fetchTime}ms`)
+      console.log(`📊 [DASHBOARD] Analytics response:`, analyticsRes.data)
+
       setFeedbackData(feedbackRes.data.feedback || [])
       setAnalytics(analyticsRes.data.analytics || null)
+
+      console.log(`📊 [DASHBOARD] Set analytics:`, analyticsRes.data.analytics)
     } catch (err) {
       console.error('Failed to fetch data:', err)
     } finally {
