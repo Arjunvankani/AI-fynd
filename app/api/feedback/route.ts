@@ -139,7 +139,14 @@ export async function POST(request: NextRequest) {
       try {
         console.log('🤖 Generating prediction for admin review...')
         const apiKey = process.env.GEMINI_API_KEY
-        const modelName = process.env.MODEL_NAME || 'gemini-pro'
+        let modelName = process.env.MODEL_NAME || 'gemini-pro'
+
+        // Validate model name - only allow valid Gemini models
+        const validModels = ['gemini-pro', 'gemini-2.0-flash', 'gemini-2.0-flash','gemini-1.5-pro', 'gemini-2.5-flash']
+        if (!validModels.includes(modelName)) {
+          console.warn(`Invalid model name: ${modelName}. Using gemini-pro instead.`)
+          modelName = 'gemini-pro'
+        }
         
         if (apiKey) {
           const predictPrompt = `You are an expert Yelp review rating classifier. Analyze reviews systematically.

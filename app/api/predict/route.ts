@@ -32,7 +32,23 @@ interface PredictionRequest {
   review_text: string
 }
 
+// Validate and get model name
+function getValidatedModelName(): string {
+  let modelName = process.env.MODEL_NAME || 'gemini-pro'
+
+  // Validate model name - only allow valid Gemini models
+  const validModels = ['gemini-pro', 'gemini-pro-vision', 'gemini-1.5-pro', 'gemini-1.5-flash']
+  if (!validModels.includes(modelName)) {
+    console.warn(`Invalid model name: ${modelName}. Using gemini-pro instead.`)
+    modelName = 'gemini-pro'
+  }
+
+  return modelName
+}
+
 export async function POST(request: NextRequest) {
+  const modelName = getValidatedModelName() // Declare outside try block
+
   try {
     const body: PredictionRequest = await request.json()
     const { review_text } = body
@@ -45,7 +61,6 @@ export async function POST(request: NextRequest) {
     }
 
     const apiKey = process.env.GEMINI_API_KEY
-    const modelName = process.env.MODEL_NAME || 'gemini-pro'
 
     if (!apiKey) {
       console.error('GEMINI_API_KEY environment variable is not set')
@@ -259,7 +274,7 @@ Return ONLY a JSON object:
           'Check API Key': 'Ensure GEMINI_API_KEY is set in .env.local',
           'Check Internet': 'Verify your internet connection is working',
           'Check Quota': 'Verify your Gemini API quota is not exceeded',
-          'Check Model': `Current model: ${process.env.MODEL_NAME || 'gemini-pro'}`
+          'Check Model': `Current model: ${modelName}`
         }
       },
       { status: statusCode }
