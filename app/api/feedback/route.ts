@@ -185,23 +185,21 @@ export async function POST(request: NextRequest) {
       // Generate prediction for admin-submitted review using internal API
       try {
         console.log('🤖 Generating prediction for admin review...')
-        const apiKey = process.env.GEMINI_API_KEY
-        let modelName = process.env.MODEL_NAME || 'gemini-2.5-flash'
+        const apiKey = process.env.GROQ_API_KEY
+        let modelName = process.env.MODEL_NAME || 'openai/gpt-oss-120b'
 
-        // Validate model name - include newer Gemini models
+        // Validate model name - Groq models
         const validModels = [
-          'gemini-pro',
-          'gemini-pro-vision',
-          'gemini-1.5-pro',
-          'gemini-1.5-flash',
-          'gemini-2.5-flash',
-          'gemini-2.0-flash-exp',
-          'gemini-2.0-flash-thinking-exp'
+          'openai/gpt-oss-120b',
+          'meta-llama/llama-3.1-405b-instruct',
+          'meta-llama/llama-3.1-70b-instruct',
+          'meta-llama/llama-3.1-8b-instruct',
+          'mixtral-8x7b-32768'
         ]
 
         if (!validModels.includes(modelName)) {
-          console.warn(`Invalid model name: ${modelName}. Using gemini-2.0-flash-exp instead.`)
-          modelName = 'gemini-2.0-flash-exp'
+          console.warn(`Invalid model name: ${modelName}. Using openai/gpt-oss-120b instead.`)
+          modelName = 'openai/gpt-oss-120b'
         }
         
         if (apiKey) {
@@ -230,20 +228,25 @@ Return ONLY a JSON object:
   "explanation": "<brief explanation>"
 }`
 
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`
-          
-          const predictResponse = await fetch(geminiUrl, {
+          const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
             body: JSON.stringify({
-              contents: [{ parts: [{ text: predictPrompt }] }],
-              generationConfig: { temperature: 0.0, maxOutputTokens: 500 }
+              model: modelName,
+              messages: [{ role: 'user', content: predictPrompt }],
+              temperature: 0.0,
+              max_tokens: 500,
+              top_p: 1,
+              stream: false
             })
           })
 
-          if (predictResponse.ok) {
-            const predictData = await predictResponse.json()
-            const content = predictData.candidates[0].content.parts[0].text
+          if (groqResponse.ok) {
+            const predictData = await groqResponse.json()
+            const content = predictData.choices[0].message.content
             
             try {
               const jsonMatch = content.match(/\{[\s\S]*\}/)

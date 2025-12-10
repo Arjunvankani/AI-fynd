@@ -14,7 +14,7 @@ Hey there! 👋 Welcome to my Yelp rating prediction system. This project was bo
 
 You know that moment when you're reading a Yelp review and thinking, "Wait, is this a 3-star or 4-star review?" Well, I built an AI that does exactly that—except it actually commits to a rating! 😄
 
-This system uses Google's Gemini 2.5 Flash to predict star ratings (1-5 ⭐) from review text using four different prompting techniques. No model training required—just pure prompt engineering magic! ✨
+This system uses Groq's GPT-OSS-120B to predict star ratings (1-5 ⭐) from review text using four different prompting techniques. No model training required—just pure prompt engineering magic! ✨
 
 ### Why Should You Care?
 
@@ -164,7 +164,7 @@ npm install  # For the web app
 pip install -r requirements.txt  # For the Jupyter notebooks
 
 # Set up your API key
-echo "GEMINI_API_KEY=your-key-here" > .env.local
+echo "GROQ_API_KEY=your-key-here" > .env.local
 
 # Run the web app
 npm run dev
@@ -173,7 +173,7 @@ npm run dev
 jupyter notebook task1_evaluation.ipynb
 ```
 
-**Get Your API Key**: Head to [Google AI Studio](https://aistudio.google.com/app/apikey) and grab a free Gemini API key. It's free for reasonable usage!
+**Get Your API Key**: Head to [Groq Console](https://console.groq.com/) and grab your Groq API key. It's free for reasonable usage!
 
 ---
 
@@ -185,8 +185,8 @@ Want to see the science behind the magic? Here's how:
 2. **Open the notebook**: `task1_evaluation.ipynb`
 3. **Configure settings**:
    ```python
-   GEMINI_API_KEY = "your-api-key-here"
-   MODEL_NAME = "gemini-2.0-flash-exp"  # Fast and free!
+   GROQ_API_KEY = "your-api-key-here"
+   MODEL_NAME = "openai/gpt-oss-120b"  # Fast and free!
    SAMPLE_SIZE = 200  # Start small, scale up
    ```
 4. **Run all cells** and watch the magic happen ✨

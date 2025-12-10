@@ -120,49 +120,53 @@ Return ONLY a JSON object:
   "adjustment_applied": "${adjustment !== 0 ? 'yes' : 'no'}"
 }`
 
-    const apiKey = process.env.GEMINI_API_KEY
-    let modelName = process.env.MODEL_NAME || 'gemini-2.0-flash-exp'
+    const apiKey = process.env.GROQ_API_KEY
+    let modelName = process.env.MODEL_NAME || 'openai/gpt-oss-120b'
 
-    // Validate model name - include newer Gemini models
+    // Validate model name - Groq models
     const validModels = [
-      'gemini-pro',
-      'gemini-pro-vision',
-      'gemini-1.5-pro',
-      'gemini-1.5-flash',
-      'gemini-2.0-flash-exp',
-      'gemini-2.0-flash-thinking-exp'
+      'openai/gpt-oss-120b',
+      'meta-llama/llama-3.1-405b-instruct',
+      'meta-llama/llama-3.1-70b-instruct',
+      'meta-llama/llama-3.1-8b-instruct',
+      'mixtral-8x7b-32768'
     ]
 
     if (!validModels.includes(modelName)) {
-      console.warn(`Invalid model name: ${modelName}. Using gemini-2.0-flash-exp instead.`)
-      modelName = 'gemini-2.0-flash-exp'
+      console.warn(`Invalid model name: ${modelName}. Using openai/gpt-oss-120b instead.`)
+      modelName = 'openai/gpt-oss-120b'
     }
 
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'Gemini API key not configured' },
+        { error: 'Groq API key not configured' },
         { status: 500 }
       )
     }
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`
-
-    const response = await fetch(geminiUrl, {
+    const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: enhancedPrompt }] }],
-        generationConfig: { temperature: 0.0, maxOutputTokens: 500 }
+        model: modelName,
+        messages: [{ role: 'user', content: enhancedPrompt }],
+        temperature: 0.0,
+        max_tokens: 500,
+        top_p: 1,
+        stream: false
       })
     })
 
-    if (!response.ok) {
-      const errorData = await response.text()
-      throw new Error(`Gemini API error: ${errorData}`)
+    if (!groqResponse.ok) {
+      const errorData = await groqResponse.text()
+      throw new Error(`Groq API error: ${errorData}`)
     }
 
-    const data = await response.json()
-    const content = data.candidates[0].content.parts[0].text
+    const data = await groqResponse.json()
+    const content = data.choices[0].message.content
 
     let result
     try {

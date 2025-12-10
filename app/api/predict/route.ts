@@ -4,14 +4,15 @@ import fs from 'fs/promises'
 import path from 'path'
 import { kv } from '@vercel/kv'
 
-// API URL will be determined based on model
-function getApiUrl(modelName: string): string {
-  // Newer models might use different endpoints
-  if (modelName.includes('2.0') || modelName.includes('2.5')) {
-    return 'https://generativelanguage.googleapis.com/v1/models'
-  }
-  return 'https://generativelanguage.googleapis.com/v1beta/models'
-}
+// Groq API models - these are the available models
+const GROQ_MODELS = [
+  'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+  'meta-llama/llama-3.1-405b-instruct',
+  'meta-llama/llama-3.1-70b-instruct',
+  'meta-llama/llama-3.1-8b-instruct',
+  'mixtral-8x7b-32768'
+]
 const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
 
 // Check if Vercel KV is available (for production data persistence)
@@ -66,27 +67,15 @@ interface PredictionRequest {
 
 // Get model name with user's preference
 function getValidatedModelName(): string {
-  // User wants gemini-2.5-flash as default
-  let modelName = process.env.MODEL_NAME || 'gemini-2.5-flash'
+  let modelName = process.env.MODEL_NAME || 'openai/gpt-oss-120b'
 
-  // Allow user's preferred models
-  const allowedModels = [
-    'gemini-pro',
-    'gemini-pro-vision',
-    'gemini-1.5-pro',
-    'gemini-1.5-flash',
-    'gemini-2.0-flash-exp',
-    'gemini-2.0-flash-thinking-exp',
-    'gemini-2.5-flash',  // User's preferred
-    'gemini-2.5-pro'     // In case it exists
-  ]
-
-  if (!allowedModels.includes(modelName)) {
-    console.warn(`Model ${modelName} may not be available. Falling back to gemini-2.5-flash`)
-    modelName = 'gemini-2.5-flash'
+  // Validate against available Groq models
+  if (!GROQ_MODELS.includes(modelName)) {
+    console.warn(`Model ${modelName} not available in Groq. Falling back to openai/gpt-oss-120b`)
+    modelName = 'openai/gpt-oss-120b'
   }
 
-  console.log(`Using Gemini model: ${modelName}`)
+  console.log(`Using Groq model: ${modelName}`)
   return modelName
 }
 
@@ -123,7 +112,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const apiKey = process.env.GEMINI_API_KEY
+    const apiKey = process.env.GROQ_API_KEY
 
     console.log(`[PREDICT] API Key present: ${!!apiKey}`)
 
@@ -131,10 +120,10 @@ export async function POST(request: NextRequest) {
       console.log('[PREDICT] ❌ Error: No API key configured')
       return NextResponse.json(
         {
-          error: 'Gemini API key not configured.',
+          error: 'Groq API key not configured.',
           troubleshooting: {
-            setup_guide: 'Check GEMINI_SETUP.md for instructions.',
-            check_env: 'Ensure GEMINI_API_KEY is set in environment variables.'
+            setup_guide: 'Get API key from https://console.groq.com/',
+            check_env: 'Ensure GROQ_API_KEY is set in environment variables.'
           }
         },
         { status: 500 }
@@ -142,12 +131,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (!apiKey) {
-      console.error('GEMINI_API_KEY environment variable is not set')
+      console.error('GROQ_API_KEY environment variable is not set')
       return NextResponse.json(
         {
-          error: 'Gemini API key not configured.',
-          details: 'Please set the GEMINI_API_KEY environment variable in your .env.local file.',
-          setup_guide: 'Check GEMINI_SETUP.md for instructions.'
+          error: 'Groq API key not configured.',
+          details: 'Please set the GROQ_API_KEY environment variable in your .env.local file.',
+          setup_guide: 'Get API key from https://console.groq.com/'
         },
         { status: 500 }
       )
@@ -238,12 +227,7 @@ Return ONLY a JSON object:
   "similar_cases": ${correctionPatterns.length}
 }`
 
-    const apiUrl = getApiUrl(modelName)
-    const geminiUrl = `${apiUrl}/${modelName}:generateContent?key=${apiKey}`
-
-    console.log(`[PREDICT] 🌐 API URL: ${apiUrl}`)
-    console.log(`[PREDICT] 🤖 Making request to Gemini API with model: ${modelName}`)
-    console.log(`[PREDICT] 📡 Request URL: ${geminiUrl.replace(apiKey, '[API_KEY]')}`)
+    console.log(`[PREDICT] 🤖 Making request to Groq API with model: ${modelName}`)
 
     let response
     let lastError
@@ -257,21 +241,22 @@ Return ONLY a JSON object:
       const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
 
       try {
-        response = await fetch(geminiUrl, {
+        response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
           },
           body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: prompt
-              }]
+            model: modelName,
+            messages: [{
+              role: 'user',
+              content: prompt
             }],
-            generationConfig: {
-              temperature: 0.0,
-              maxOutputTokens: 500,
-            }
+            temperature: 0.0,
+            max_tokens: 500,
+            top_p: 1,
+            stream: false
           }),
           signal: controller.signal
         })
@@ -286,7 +271,7 @@ Return ONLY a JSON object:
 
         // For server errors (5xx), store error and retry
         const errorData = await response.text()
-        lastError = new Error(`Gemini API error (${response.status}): ${errorData}`)
+        lastError = new Error(`Groq API error (${response.status}): ${errorData}`)
         console.log(`[PREDICT] ⚠️ Attempt ${attempt} failed with server error, will retry:`, lastError.message)
 
       } catch (fetchError: any) {
@@ -318,20 +303,20 @@ Return ONLY a JSON object:
     // Check if the final response is ok
     if (!response.ok) {
       const errorData = await response.text()
-      throw new Error(`Gemini API error (${response.status}): ${errorData}`)
+      throw new Error(`Groq API error (${response.status}): ${errorData}`)
     }
 
-    console.log(`[PREDICT] 📨 Received response from Gemini API (status: ${response.status})`)
+    console.log(`[PREDICT] 📨 Received response from Groq API (status: ${response.status})`)
 
     const data = await response.json()
     console.log(`[PREDICT] 📄 Response data keys:`, Object.keys(data))
 
-    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       console.log('[PREDICT] ❌ Invalid response structure:', data)
-      throw new Error('Invalid response structure from Gemini API')
+      throw new Error('Invalid response structure from Groq API')
     }
 
-    const content = data.candidates[0].content.parts[0].text
+    const content = data.choices[0].message.content
     console.log(`[PREDICT] 📝 Raw response content: "${content.substring(0, 200)}..."`)
 
     // Extract JSON from response
@@ -414,9 +399,9 @@ Return ONLY a JSON object:
         error: errorMessage,
         details: error.message,
         troubleshooting: {
-          'Check API Key': 'Ensure GEMINI_API_KEY is set in .env.local',
+          'Check API Key': 'Ensure GROQ_API_KEY is set in .env.local',
           'Check Internet': 'Verify your internet connection is working',
-          'Check Quota': 'Verify your Gemini API quota is not exceeded',
+          'Check Quota': 'Verify your Groq API quota is not exceeded',
           'Check Model': `Current model: ${modelName}`
         }
       },
