@@ -245,40 +245,77 @@ Return ONLY a JSON object:
     console.log(`[PREDICT] 🤖 Making request to Gemini API with model: ${modelName}`)
     console.log(`[PREDICT] 📡 Request URL: ${geminiUrl.replace(apiKey, '[API_KEY]')}`)
 
-    // Add timeout and better error handling
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
-
     let response
-    try {
-      response = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: prompt
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.0,
-            maxOutputTokens: 500,
-          }
-        }),
-        signal: controller.signal
-      })
-    } catch (fetchError: any) {
-      clearTimeout(timeoutId)
-      if (fetchError.name === 'AbortError') {
-        throw new Error('Request timed out after 30 seconds. Please check your internet connection.')
+    let lastError
+
+    // Retry logic: try up to 3 times with exponential backoff
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      console.log(`[PREDICT] 🔄 Attempt ${attempt}/3`)
+
+      // Add timeout and better error handling
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+
+      try {
+        response = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: prompt
+              }]
+            }],
+            generationConfig: {
+              temperature: 0.0,
+              maxOutputTokens: 500,
+            }
+          }),
+          signal: controller.signal
+        })
+
+        clearTimeout(timeoutId)
+
+        // If we get a successful response (not 5xx server error), break out of retry loop
+        if (response.ok || response.status < 500) {
+          console.log(`[PREDICT] ✅ Attempt ${attempt} successful (status: ${response.status})`)
+          break
+        }
+
+        // For server errors (5xx), store error and retry
+        const errorData = await response.text()
+        lastError = new Error(`Gemini API error (${response.status}): ${errorData}`)
+        console.log(`[PREDICT] ⚠️ Attempt ${attempt} failed with server error, will retry:`, lastError.message)
+
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+        lastError = fetchError
+
+        if (fetchError.name === 'AbortError') {
+          lastError = new Error('Request timed out after 30 seconds. Please check your internet connection.')
+          console.log(`[PREDICT] ⏰ Attempt ${attempt} timed out`)
+        } else {
+          lastError = new Error(`Network error: ${fetchError.message}`)
+          console.log(`[PREDICT] 🌐 Attempt ${attempt} network error:`, fetchError.message)
+        }
       }
-      throw new Error(`Network error: ${fetchError.message}`)
+
+      // If this is not the last attempt, wait before retrying
+      if (attempt < 3) {
+        const waitTime = Math.pow(2, attempt) * 1000 // Exponential backoff: 2s, 4s
+        console.log(`[PREDICT] ⏳ Waiting ${waitTime}ms before retry...`)
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+      }
     }
 
-    clearTimeout(timeoutId)
+    // If we still don't have a response after all retries, throw the last error
+    if (!response) {
+      throw lastError || new Error('All retry attempts failed')
+    }
 
+    // Check if the final response is ok
     if (!response.ok) {
       const errorData = await response.text()
       throw new Error(`Gemini API error (${response.status}): ${errorData}`)

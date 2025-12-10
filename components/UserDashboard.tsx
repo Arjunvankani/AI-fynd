@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import axios from 'axios'
-import { Sparkles, Clock, TrendingUp, CheckCircle2, AlertCircle, Brain } from 'lucide-react'
+import { Sparkles, Clock, TrendingUp, CheckCircle2, AlertCircle, Brain, RefreshCw } from 'lucide-react'
 import StarRating from './StarRating'
 import FeedbackPanel from './FeedbackPanel'
 
@@ -25,6 +25,7 @@ interface PredictionResult {
 export default function UserDashboard() {
   const [reviewText, setReviewText] = useState('')
   const [loading, setLoading] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const [result, setResult] = useState<PredictionResult | null>(null)
   const [error, setError] = useState('')
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
@@ -48,25 +49,53 @@ export default function UserDashboard() {
     setFeedbackSubmitted(false)
 
     try {
+      console.log('🔮 Starting prediction request...')
       const response = await axios.post('/api/predict', {
         review_text: reviewText
       })
-      
+
+      console.log('✅ Prediction successful:', response.data)
       setResult(response.data)
     } catch (err: any) {
-      const errorData = err.response?.data
-      let errorMessage = 'Failed to get prediction. Please try again.'
+      console.error('🚨 Prediction error:', err)
 
-      if (errorData?.error) {
+      const errorData = err.response?.data
+      const isServerError = err.response?.status >= 500
+
+      if (isServerError) {
+        // For server errors, show a user-friendly message and auto-retry once
+        console.log('🔄 Server error detected, attempting auto-retry...')
+        setRetrying(true)
+        setError('🤖 Our AI is thinking hard... Retrying automatically...')
+
+        try {
+          // Wait 2 seconds then retry once
+          await new Promise(resolve => setTimeout(resolve, 2000))
+
+          const retryResponse = await axios.post('/api/predict', {
+            review_text: reviewText
+          })
+
+          console.log('✅ Retry successful!')
+          setResult(retryResponse.data)
+          setRetrying(false)
+          return
+        } catch (retryErr) {
+          console.error('🚨 Retry also failed:', retryErr)
+          setRetrying(false)
+        }
+      }
+
+      // If retry failed or it's not a server error, show error message
+      let errorMessage = 'Unable to analyze your review right now. Our AI is taking a coffee break! ☕'
+
+      if (errorData?.error && !isServerError) {
+        // Show specific error only for client errors (4xx)
         errorMessage = errorData.error
       }
 
-      if (errorData?.troubleshooting) {
-        errorMessage += '\n\nTroubleshooting:\n' +
-          Object.entries(errorData.troubleshooting)
-            .map(([key, value]) => `• ${key}: ${value}`)
-            .join('\n')
-      }
+      // Add helpful suggestion
+      errorMessage += '\n\n💡 Try: Refresh the page or try a different review'
 
       setError(errorMessage)
     } finally {
@@ -132,10 +161,15 @@ export default function UserDashboard() {
 
           <button
             onClick={handlePredict}
-            disabled={loading || !reviewText.trim()}
+            disabled={loading || retrying || !reviewText.trim()}
             className="w-full bg-gradient-to-r from-primary-600 to-purple-600 text-white py-3 px-6 rounded-lg font-semibold hover:shadow-lg transform hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
           >
-            {loading ? (
+            {retrying ? (
+              <span className="flex items-center justify-center">
+                <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
+                Retrying...
+              </span>
+            ) : loading ? (
               <span className="flex items-center justify-center">
                 <Clock className="h-5 w-5 mr-2 animate-spin" />
                 Analyzing...
