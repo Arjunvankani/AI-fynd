@@ -79,9 +79,16 @@ async function writeFeedback(feedback: any[]) {
       console.log(`[KV] Writing ${feedback.length} feedback entries to Vercel KV`)
       await kv.set('feedback_data', feedback)
       console.log('[KV] Successfully stored feedback in Vercel KV')
+
+      // Verify the data was saved
+      const savedData = await kv.get('feedback_data')
+      const savedCount = Array.isArray(savedData) ? savedData.length : 0
+      console.log(`[KV] Verification: ${savedCount} entries now in KV`)
+
       return
     } catch (error) {
       console.error('[KV] Error writing to KV:', error)
+      console.error('[KV] Error details:', error instanceof Error ? error.message : 'Unknown error')
       throw error
     }
   }

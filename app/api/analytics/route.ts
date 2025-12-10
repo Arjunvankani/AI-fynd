@@ -11,50 +11,64 @@ const USE_KV = !!(process.env.KV_URL || process.env.KV_REST_API_URL || process.e
 console.log('[STORAGE] Analytics USE_KV:', USE_KV, 'KV_URL:', !!process.env.KV_URL, 'KV_REST_API_URL:', !!process.env.KV_REST_API_URL)
 
 async function readFeedback(): Promise<any[]> {
+  console.log('[ANALYTICS] Reading feedback data...')
+  console.log('[ANALYTICS] USE_KV:', USE_KV)
+
   if (USE_KV) {
     try {
       console.log('[KV] Analytics reading feedback from Vercel KV')
       const feedback = await kv.get('feedback_data') || []
-      console.log(`[KV] Analytics retrieved ${Array.isArray(feedback) ? feedback.length : 0} feedback entries`)
-      return Array.isArray(feedback) ? feedback : []
+      const feedbackArray = Array.isArray(feedback) ? feedback : []
+      console.log(`[KV] Analytics retrieved ${feedbackArray.length} feedback entries`)
+
+      // Log some sample data for debugging
+      if (feedbackArray.length > 0) {
+        console.log('[KV] Sample feedback entry:', JSON.stringify(feedbackArray[0], null, 2))
+      }
+
+      return feedbackArray
     } catch (error) {
       console.error('[KV] Analytics error reading from KV:', error)
+      console.error('[KV] Error details:', error instanceof Error ? error.message : 'Unknown error')
       return []
     }
   }
 
-  // Check if we're in a serverless environment without KV
-  const isServerlessWithoutKV = (process.env.VERCEL || process.env.NETLIFY) && !USE_KV
-
-  if (isServerlessWithoutKV) {
-    // In serverless without KV, return empty array (no data available)
-    console.log('[STORAGE] Analytics: No persistent storage in serverless environment without KV')
-    return []
-  }
-
   // Fallback to file storage for local development
+  console.log('[ANALYTICS] Using file storage fallback')
   try {
     const data = await fs.readFile(FEEDBACK_FILE, 'utf-8')
-    return JSON.parse(data)
-  } catch {
+    const feedback = JSON.parse(data)
+    console.log(`[FILE] Analytics read ${feedback.length} entries from file`)
+    return feedback
+  } catch (error) {
+    console.log('[FILE] Error reading feedback file:', error instanceof Error ? error.message : 'Unknown error')
     return []
   }
 }
 
 export async function GET(request: Request) {
   try {
+    console.log('[ANALYTICS] ===== ANALYTICS REQUEST START =====')
+
     const { searchParams } = new URL(request.url)
     const timePeriod = searchParams.get('timePeriod') || 'hour'
+    console.log('[ANALYTICS] Time period:', timePeriod)
 
     const feedback = await readFeedback()
+    console.log('[ANALYTICS] Total feedback entries found:', feedback.length)
 
     if (feedback.length === 0) {
+      console.log('[ANALYTICS] No feedback data available, returning zeros')
       return NextResponse.json({
         analytics: {
           total_feedback: 0,
           accuracy_rate: 0,
           corrections_count: 0,
           average_error: 0,
+          positive_count: 0,
+          negative_count: 0,
+          neutral_count: 0,
           rating_distribution: [],
           sentiment_distribution: [],
           time_based_responses: []
@@ -62,17 +76,27 @@ export async function GET(request: Request) {
       })
     }
 
+    console.log('[ANALYTICS] Processing feedback data...')
+
     // Calculate metrics (no longer weighted)
     const total_feedback = feedback.length
     const correct_predictions = feedback.filter(f => !f.corrected).length
     const accuracy_rate = total_feedback > 0 ? correct_predictions / total_feedback : 0
     const corrections_count = feedback.filter(f => f.corrected).length
 
+    console.log('[ANALYTICS] Basic metrics:')
+    console.log(`  - Total feedback: ${total_feedback}`)
+    console.log(`  - Correct predictions: ${correct_predictions}`)
+    console.log(`  - Accuracy rate: ${accuracy_rate}`)
+    console.log(`  - Corrections count: ${corrections_count}`)
+
     // Average error calculation
     const total_error = feedback.reduce((sum, f) => {
       return sum + Math.abs(f.predicted_rating - f.user_rating)
     }, 0)
     const average_error = total_feedback > 0 ? total_error / total_feedback : 0
+
+    console.log(`  - Average error: ${average_error}`)
 
     // Pattern analysis for RAG system
     const error_patterns: { [key: string]: number } = {}
@@ -100,7 +124,12 @@ export async function GET(request: Request) {
     const positiveCount = feedback.filter(f => f.user_rating >= 4).length
     const negativeCount = feedback.filter(f => f.user_rating <= 2).length
     const neutralCount = feedback.filter(f => f.user_rating === 3).length
-    
+
+    console.log('[ANALYTICS] Sentiment analysis:')
+    console.log(`  - Positive (4-5⭐): ${positiveCount}`)
+    console.log(`  - Neutral (3⭐): ${neutralCount}`)
+    console.log(`  - Negative (1-2⭐): ${negativeCount}`)
+
     const sentiment_distribution = [
       { sentiment: 'Positive (4-5⭐)', count: positiveCount, color: '#10b981' },
       { sentiment: 'Neutral (3⭐)', count: neutralCount, color: '#6366f1' },
@@ -160,7 +189,7 @@ export async function GET(request: Request) {
       .sort((a, b) => a.time.localeCompare(b.time))
       .slice(timePeriod === 'minute' ? -60 : timePeriod === 'hour' ? -24 : timePeriod === 'day' ? -30 : timePeriod === 'week' ? -12 : -12) // Last N periods
 
-    return NextResponse.json({
+    const analyticsResponse = {
       analytics: {
         total_feedback,
         accuracy_rate,
@@ -174,11 +203,21 @@ export async function GET(request: Request) {
         time_based_responses,
         error_patterns
       }
-    })
+    }
+
+    console.log('[ANALYTICS] Response summary:')
+    console.log(`  - Total feedback: ${analyticsResponse.analytics.total_feedback}`)
+    console.log(`  - Rating distribution length: ${analyticsResponse.analytics.rating_distribution.length}`)
+    console.log(`  - Sentiment distribution:`, analyticsResponse.analytics.sentiment_distribution.map(s => `${s.sentiment}: ${s.count}`))
+    console.log(`  - Time-based responses: ${analyticsResponse.analytics.time_based_responses.length} periods`)
+
+    console.log('[ANALYTICS] ===== ANALYTICS REQUEST COMPLETE =====')
+
+    return NextResponse.json(analyticsResponse)
   } catch (error: any) {
     console.error('Analytics error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to calculate analytics' },
+      { error: (error instanceof Error ? error.message : 'Unknown error') || 'Failed to calculate analytics' },
       { status: 500 }
     )
   }
