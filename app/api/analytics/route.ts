@@ -13,10 +13,20 @@ let analyticsMemoryStorage: any[] = []
 
 async function readFeedback(): Promise<any[]> {
   if (IS_SERVERLESS) {
-    // In serverless, we can't share memory between routes, so analytics will be empty
-    // This is a limitation of serverless architectures
-    console.log('[SERVERLESS] Analytics: No persistent storage available in serverless environment')
-    console.log('[SERVERLESS] Dashboard will show empty analytics until feedback data is persisted')
+    // Try to read from /tmp first (written by feedback route)
+    try {
+      const tmpFile = '/tmp/feedback-data.json'
+      const data = await fs.readFile(tmpFile, 'utf-8')
+      const feedback = JSON.parse(data)
+      console.log(`[SERVERLESS] Analytics loaded ${feedback.length} entries from ${tmpFile}`)
+      return feedback
+    } catch (tmpError) {
+      console.log('[SERVERLESS] Could not read from /tmp, trying in-memory storage')
+    }
+
+    // Fallback: return empty array (serverless limitation)
+    console.log('[SERVERLESS] Analytics: No persistent storage available - dashboard will show empty data')
+    console.log('[SERVERLESS] For persistent data, consider using Vercel KV or a database')
     return []
   }
 

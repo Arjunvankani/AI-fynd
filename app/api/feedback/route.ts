@@ -55,6 +55,15 @@ async function writeFeedback(feedback: any[]) {
     // Use in-memory storage for serverless
     memoryStorage = feedback
     console.log(`[SERVERLESS] Stored ${feedback.length} feedback entries in memory`)
+
+    // Also try to write to /tmp for cross-route persistence (limited but better than nothing)
+    try {
+      const tmpFile = '/tmp/feedback-data.json'
+      await fs.writeFile(tmpFile, JSON.stringify(feedback), 'utf-8')
+      console.log(`[SERVERLESS] Also persisted to ${tmpFile} for cross-route access`)
+    } catch (tmpError) {
+      console.log('[SERVERLESS] Could not write to /tmp (normal in some serverless environments)')
+    }
     return
   }
 
