@@ -24,7 +24,7 @@ This system uses Groq's GPT-OSS-120B to predict star ratings (1-5 ⭐) from revi
 - **Learning resource**: Perfect for understanding LLM prompting strategies
 
 ---
-
+### Task 1: Implement 4 Prompting Approaches – Done & Optimized!
 ## 🧠 The Four Approaches (aka "The Experiments")
 
 I didn't just stick with one method—I tested four different prompting strategies to see what works best:
@@ -34,41 +34,79 @@ No examples, no hand-holding. Just tell the AI what to do and hope for the best.
 
 **Pros**: Fast, simple, no prep needed  
 **Cons**: Sometimes confused by sarcasm (aren't we all?)  
-**Accuracy**: ~70% (not bad for a first try!)
+
 
 ### 2. 📚 Few-Shot: "Learn by Example"
 I showed the AI a few examples of reviews with their ratings, like a mini training session.
 
 **Pros**: Much better accuracy, learns patterns quickly  
 **Cons**: Longer prompts = slightly slower  
-**Accuracy**: ~76% (we're getting somewhere!)
+
 
 ### 3. 🤔 Chain-of-Thought: "Show Your Work"
 Remember when your math teacher said "show your reasoning"? Same idea here.
 
 **Pros**: Better at handling tricky, ambiguous reviews  
 **Cons**: Takes more time, uses more tokens  
-**Accuracy**: ~73% (thoughtful but not the fastest)
 
-### 4. 🚀 Hybrid: "Best of Both Worlds"
+
+### 4. 🚀 Aspect-Based Scoring: "Best of Both Worlds."
 Combined examples with reasoning. This is where things got interesting!
 
-**Pros**: Highest accuracy, robust across all review types  
+**Pros**: Structured aspect breakdown + weighted scoring
 **Cons**: Longest prompts, but worth it  
-**Accuracy**: ~78% (🏆 Winner!)
+
 
 ---
 
-## 📊 The Results (aka "What Actually Happened")
+# Powered by **Groq** with two high-performance models:
+- Primary: `qwen/qwen3-32b` → Best accuracy & JSON compliance
+- Fallback: `openai/gpt-oss-120b` → Fast and reliable
 
-After testing on 200 real Yelp reviews, here's what I found:
+---
 
-| Approach | Accuracy | MAE | Off-by-One | Best For |
-|----------|----------|-----|------------|----------|
-| Zero-Shot | 70.5% | 0.48 | 90.2% | Quick tests |
-| Few-Shot | 75.8% | 0.38 | 94.1% | General use |
-| CoT | 73.1% | 0.43 | 92.0% | Complex reviews |
-| **Hybrid** | **77.6%** | **0.33** | **95.3%** | **Production** ✨ |
+
+### 🧠 The Four Improved Prompting Approaches (2025 Edition)
+
+| Rank | Approach                    | Style                            | Key Strength                          | Valid JSON % | Exact Accuracy |
+|------|-----------------------------|-----------------------------------|----------------------------------------|--------------|----------------|
+| 1st  | **Aspect-Based Scoring**    | Structured aspect breakdown + weighted scoring | Most accurate & interpretable          | 38.5%        | **71.4%**      |
+| 2nd  | **Few-Shot Learning**       | 5 diverse real-world examples     | Robust pattern recognition             | 65.5%        | **70.2%**      |
+| 3rd  | **Zero-Shot (Enhanced)**    | Clear guidelines + star definitions | Highest JSON reliability               | **86.5%**    | 67.6%          |
+| 4th  | **Chain-of-Thought**        | Step-by-step sentiment analysis   | Great for complex reviews              | 72.5%        | 62.8%          |
+
+> **Winner: Aspect-Based Approach** — Achieved **71.4% exact match** and **97.4% within ±1 star** on 200 real Yelp reviews!
+
+# 1:gpt-oss-120b 
+<img width="1587" height="1092" alt="download" src="https://github.com/user-attachments/assets/a29345c1-66f1-4525-9718-0ddbeff04db1" />
+
+# 2:qwen3-32b
+<img width="1587" height="1092" alt="download" src="https://github.com/user-attachments/assets/c32d2aae-4a0e-4238-a8d5-34cfca270fd3" />
+
+---
+
+### 📊 Final Results (200 Real Yelp Reviews)
+
+| Rank | Approach              | Valid Responses | Exact Accuracy | MAE   | ±1 Accuracy | Success Rate |
+|------|-----------------------|------------------|----------------|-------|-------------|--------------|
+| 1    | Aspect-Based (A4)     | 77/200           | **71.4%**      | 0.31  | **97.4%**   | 38.5%        |
+| 2    | Few-Shot (A2)         | 131/200          | **70.2%**      | 0.34  | 97.7%       | 65.5%        |
+| 3    | Zero-Shot (A1)        | 173/200          | 67.6%          | 0.35  | **98.8%**   | **86.5%**    |
+| 4    | Chain-of-Thought (A3) | 145/200          | 62.8%          | 0.40  | 98.6%       | 72.5%        |
+
+
+
+**Confusion matrices**
+
+# 1:gpt-oss-120b 
+<img width="1256" height="1290" alt="download" src="https://github.com/user-attachments/assets/5045dacb-5587-4fcd-b10c-60be80d5bd8d" />
+
+# 2:qwen3-32b
+<img width="1256" height="1290" alt="download" src="https://github.com/user-attachments/assets/47f3893d-f788-43c8-bb48-552af7479fd2" />
+
+
+
+
 
 **Translation**: The Hybrid approach gets it exactly right 78% of the time, and within ±1 star 95% of the time. Pretty solid for an AI reading between the lines of human emotions!
 
