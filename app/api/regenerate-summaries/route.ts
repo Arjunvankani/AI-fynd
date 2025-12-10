@@ -4,7 +4,15 @@ import path from 'path'
 
 const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
 
+// Check if we're in a serverless environment (Vercel, Netlify, etc.)
+const IS_SERVERLESS = process.env.VERCEL || process.env.NETLIFY || !process.cwd().includes('Desktop')
+
+// In-memory storage for serverless environments
+let regenerateMemoryStorage: any[] = []
+
 async function ensureDataDir() {
+  if (IS_SERVERLESS) return // Skip in serverless environments
+
   const dataDir = path.join(process.cwd(), 'data')
   try {
     await fs.access(dataDir)
@@ -14,6 +22,11 @@ async function ensureDataDir() {
 }
 
 async function readFeedback(): Promise<any[]> {
+  if (IS_SERVERLESS) {
+    console.log('[SERVERLESS] Using in-memory storage for feedback (regenerate-summaries)')
+    return regenerateMemoryStorage
+  }
+
   try {
     await ensureDataDir()
     const data = await fs.readFile(FEEDBACK_FILE, 'utf-8')
@@ -24,8 +37,20 @@ async function readFeedback(): Promise<any[]> {
 }
 
 async function writeFeedback(feedback: any[]) {
-  await ensureDataDir()
-  await fs.writeFile(FEEDBACK_FILE, JSON.stringify(feedback, null, 2))
+  if (IS_SERVERLESS) {
+    regenerateMemoryStorage = feedback
+    console.log(`[SERVERLESS] Stored ${feedback.length} feedback entries in memory (regenerate-summaries)`)
+    return
+  }
+
+  try {
+    await ensureDataDir()
+    await fs.writeFile(FEEDBACK_FILE, JSON.stringify(feedback, null, 2))
+    console.log(`Successfully wrote ${feedback.length} feedback entries to file`)
+  } catch (error) {
+    console.error('Error writing feedback file:', error)
+    throw error
+  }
 }
 
 export async function POST(request: NextRequest) {

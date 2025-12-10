@@ -5,12 +5,37 @@ import path from 'path'
 const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
 const TRAINING_FILE = path.join(process.cwd(), 'data', 'training_data.json')
 
+// Check if we're in a serverless environment (Vercel, Netlify, etc.)
+const IS_SERVERLESS = process.env.VERCEL || process.env.NETLIFY || !process.cwd().includes('Desktop')
+
+// In-memory storage for serverless environments
+let trainingMemoryStorage: any[] = []
+
 interface TrainRequest {
   feedback_ids: string[]
 }
 
-async function readFeedback(): Promise<any[]> {
+async function ensureDataDir() {
+  if (IS_SERVERLESS) return // Skip in serverless environments
+
+  const dataDir = path.join(process.cwd(), 'data')
   try {
+    await fs.access(dataDir)
+  } catch {
+    await fs.mkdir(dataDir, { recursive: true })
+  }
+}
+
+async function readFeedback(): Promise<any[]> {
+  if (IS_SERVERLESS) {
+    // Import feedback from memory storage (this is a limitation in serverless)
+    // In production, you'd want to use a shared database
+    console.log('[SERVERLESS] Cannot read feedback from file in serverless environment')
+    return []
+  }
+
+  try {
+    await ensureDataDir()
     const data = await fs.readFile(FEEDBACK_FILE, 'utf-8')
     return JSON.parse(data)
   } catch {
@@ -19,7 +44,13 @@ async function readFeedback(): Promise<any[]> {
 }
 
 async function readTrainingData(): Promise<any[]> {
+  if (IS_SERVERLESS) {
+    console.log('[SERVERLESS] Using in-memory storage for training data')
+    return trainingMemoryStorage
+  }
+
   try {
+    await ensureDataDir()
     const data = await fs.readFile(TRAINING_FILE, 'utf-8')
     return JSON.parse(data)
   } catch {
@@ -28,13 +59,20 @@ async function readTrainingData(): Promise<any[]> {
 }
 
 async function writeTrainingData(data: any[]) {
-  const dataDir = path.join(process.cwd(), 'data')
-  try {
-    await fs.access(dataDir)
-  } catch {
-    await fs.mkdir(dataDir, { recursive: true })
+  if (IS_SERVERLESS) {
+    trainingMemoryStorage = data
+    console.log(`[SERVERLESS] Stored ${data.length} training entries in memory`)
+    return
   }
-  await fs.writeFile(TRAINING_FILE, JSON.stringify(data, null, 2))
+
+  try {
+    await ensureDataDir()
+    await fs.writeFile(TRAINING_FILE, JSON.stringify(data, null, 2))
+    console.log(`Successfully wrote ${data.length} training entries to file`)
+  } catch (error) {
+    console.error('Error writing training data file:', error)
+    throw error
+  }
 }
 
 export async function POST(request: NextRequest) {

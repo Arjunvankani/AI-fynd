@@ -16,8 +16,16 @@ interface FeedbackRequest {
 
 const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
 
-// Ensure data directory exists
+// Check if we're in a serverless environment (Vercel, Netlify, etc.)
+const IS_SERVERLESS = process.env.VERCEL || process.env.NETLIFY || !process.cwd().includes('Desktop')
+
+// In-memory storage for serverless environments
+let memoryStorage: any[] = []
+
+// Ensure data directory exists (only for local development)
 async function ensureDataDir() {
+  if (IS_SERVERLESS) return // Skip in serverless environments
+
   const dataDir = path.join(process.cwd(), 'data')
   try {
     await fs.access(dataDir)
@@ -27,6 +35,12 @@ async function ensureDataDir() {
 }
 
 async function readFeedback(): Promise<any[]> {
+  if (IS_SERVERLESS) {
+    // Use in-memory storage for serverless
+    console.log('[SERVERLESS] Using in-memory storage for feedback')
+    return memoryStorage
+  }
+
   try {
     await ensureDataDir()
     const data = await fs.readFile(FEEDBACK_FILE, 'utf-8')
@@ -37,6 +51,13 @@ async function readFeedback(): Promise<any[]> {
 }
 
 async function writeFeedback(feedback: any[]) {
+  if (IS_SERVERLESS) {
+    // Use in-memory storage for serverless
+    memoryStorage = feedback
+    console.log(`[SERVERLESS] Stored ${feedback.length} feedback entries in memory`)
+    return
+  }
+
   try {
     await ensureDataDir()
     await fs.writeFile(FEEDBACK_FILE, JSON.stringify(feedback, null, 2), 'utf-8')
