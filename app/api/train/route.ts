@@ -7,7 +7,9 @@ const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
 const TRAINING_FILE = path.join(process.cwd(), 'data', 'training_data.json')
 
 // Check if Vercel KV is available (for production data persistence)
-const USE_KV = process.env.KV_URL && process.env.KV_REST_API_URL
+const USE_KV = !!(process.env.KV_URL || process.env.KV_REST_API_URL || process.env.KV_REST_API_TOKEN)
+
+console.log('[STORAGE] Train USE_KV:', USE_KV)
 
 // Fallback in-memory storage (only for development/testing)
 let trainingMemoryStorage: any[] = []
@@ -38,6 +40,15 @@ async function readFeedback(): Promise<any[]> {
       console.error('[KV] Train error reading feedback from KV:', error)
       return []
     }
+  }
+
+  // Check if we're in a serverless environment without KV
+  const isServerlessWithoutKV = (process.env.VERCEL || process.env.NETLIFY) && !USE_KV
+
+  if (isServerlessWithoutKV) {
+    // In serverless without KV, return empty array (no data available)
+    console.log('[STORAGE] Train: No persistent storage in serverless environment without KV')
+    return []
   }
 
   // Fallback to file storage for local development

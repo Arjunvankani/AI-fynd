@@ -6,7 +6,9 @@ import { kv } from '@vercel/kv'
 const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
 
 // Check if Vercel KV is available (for production data persistence)
-const USE_KV = process.env.KV_URL && process.env.KV_REST_API_URL
+const USE_KV = !!(process.env.KV_URL || process.env.KV_REST_API_URL || process.env.KV_REST_API_TOKEN)
+
+console.log('[STORAGE] Analytics USE_KV:', USE_KV, 'KV_URL:', !!process.env.KV_URL, 'KV_REST_API_URL:', !!process.env.KV_REST_API_URL)
 
 async function readFeedback(): Promise<any[]> {
   if (USE_KV) {
@@ -19,6 +21,15 @@ async function readFeedback(): Promise<any[]> {
       console.error('[KV] Analytics error reading from KV:', error)
       return []
     }
+  }
+
+  // Check if we're in a serverless environment without KV
+  const isServerlessWithoutKV = (process.env.VERCEL || process.env.NETLIFY) && !USE_KV
+
+  if (isServerlessWithoutKV) {
+    // In serverless without KV, return empty array (no data available)
+    console.log('[STORAGE] Analytics: No persistent storage in serverless environment without KV')
+    return []
   }
 
   // Fallback to file storage for local development

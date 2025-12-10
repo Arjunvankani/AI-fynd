@@ -18,14 +18,20 @@ interface FeedbackRequest {
 const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
 
 // Check if Vercel KV is available (for production data persistence)
-const USE_KV = process.env.KV_URL && process.env.KV_REST_API_URL
+const USE_KV = !!(process.env.KV_URL || process.env.KV_REST_API_URL || process.env.KV_REST_API_TOKEN)
+
+console.log('[STORAGE] USE_KV:', USE_KV, 'KV_URL:', !!process.env.KV_URL, 'KV_REST_API_URL:', !!process.env.KV_REST_API_URL)
 
 // Fallback in-memory storage (only for development/testing)
 let memoryStorage: any[] = []
 
 // Ensure data directory exists (only for local development)
 async function ensureDataDir() {
-  if (USE_KV) return // Skip when using KV storage
+  // Never try to create directories in serverless environments
+  if (USE_KV || process.env.VERCEL || process.env.NETLIFY) {
+    console.log('[STORAGE] Skipping directory creation in serverless environment')
+    return
+  }
 
   const dataDir = path.join(process.cwd(), 'data')
   try {
@@ -46,6 +52,15 @@ async function readFeedback(): Promise<any[]> {
       console.error('[KV] Error reading from KV:', error)
       return []
     }
+  }
+
+  // Check if we're in a serverless environment without KV
+  const isServerlessWithoutKV = (process.env.VERCEL || process.env.NETLIFY) && !USE_KV
+
+  if (isServerlessWithoutKV) {
+    // In serverless without KV, return memory storage
+    console.log(`[MEMORY] Returning ${memoryStorage.length} feedback entries from memory (serverless without KV)`)
+    return memoryStorage
   }
 
   // Fallback to file storage for local development
@@ -69,6 +84,16 @@ async function writeFeedback(feedback: any[]) {
       console.error('[KV] Error writing to KV:', error)
       throw error
     }
+  }
+
+  // Check if we're in a serverless environment without KV
+  const isServerlessWithoutKV = (process.env.VERCEL || process.env.NETLIFY) && !USE_KV
+
+  if (isServerlessWithoutKV) {
+    // In serverless without KV, just store in memory and don't try file operations
+    memoryStorage = feedback
+    console.log(`[MEMORY] Stored ${feedback.length} feedback entries in memory (serverless without KV)`)
+    return
   }
 
   // Fallback to file storage for local development
