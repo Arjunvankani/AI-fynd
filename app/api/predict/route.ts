@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import fs from 'fs/promises'
 import path from 'path'
+import { kv } from '@vercel/kv'
 
 // API URL will be determined based on model
 function getApiUrl(modelName: string): string {
@@ -13,6 +14,11 @@ function getApiUrl(modelName: string): string {
 }
 const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
 
+// Check if Vercel KV is available (for production data persistence)
+const USE_KV = !!(process.env.KV_URL || process.env.KV_REST_API_URL || process.env.KV_REST_API_TOKEN)
+
+console.log('[STORAGE] Predict USE_KV:', USE_KV, 'KV_URL:', !!process.env.KV_URL, 'KV_REST_API_URL:', !!process.env.KV_REST_API_URL)
+
 // Exact match function - only return identical reviews
 function isExactMatch(text1: string, text2: string): boolean {
   // Normalize text for comparison (lowercase, remove extra spaces)
@@ -21,6 +27,25 @@ function isExactMatch(text1: string, text2: string): boolean {
 }
 
 async function findExactMatchingFeedback(reviewText: string) {
+  if (USE_KV) {
+    try {
+      console.log('[KV] Predict reading feedback from Vercel KV for RAG')
+      const feedback = await kv.get('feedback_data') || []
+      const feedbackArray = Array.isArray(feedback) ? feedback : []
+
+      // Find exact matching feedback entries
+      const exactMatches = feedbackArray
+        .filter((f: any) => f.corrected && isExactMatch(reviewText, f.review_text))
+
+      console.log(`[KV] Found ${exactMatches.length} exact matches for RAG`)
+      return exactMatches
+    } catch (error) {
+      console.error('[KV] Predict error reading feedback from KV:', error)
+      return []
+    }
+  }
+
+  // Fallback to file storage for local development
   try {
     const data = await fs.readFile(FEEDBACK_FILE, 'utf-8')
     const feedback = JSON.parse(data)
@@ -80,11 +105,18 @@ function extractPrediction(responseText: string): { stars: number; explanation: 
 export async function POST(request: NextRequest) {
   const modelName = getValidatedModelName() // Declare outside try block
 
+  console.log(`[PREDICT] ===== STARTING PREDICTION REQUEST =====`)
+  console.log(`[PREDICT] Model: ${modelName}`)
+
   try {
     const body: PredictionRequest = await request.json()
     const { review_text } = body
 
+    console.log(`[PREDICT] Review text length: ${review_text?.length || 0}`)
+    console.log(`[PREDICT] Review preview: "${review_text?.substring(0, 50)}..."`)
+
     if (!review_text || review_text.length < 10) {
+      console.log('[PREDICT] ❌ Validation failed: Review text too short')
       return NextResponse.json(
         { error: 'Review text must be at least 10 characters' },
         { status: 400 }
@@ -93,8 +125,21 @@ export async function POST(request: NextRequest) {
 
     const apiKey = process.env.GEMINI_API_KEY
 
-    console.log(`Using Gemini model: ${modelName}`)
-    console.log(`API Key present: ${!!apiKey}`)
+    console.log(`[PREDICT] API Key present: ${!!apiKey}`)
+
+    if (!apiKey) {
+      console.log('[PREDICT] ❌ Error: No API key configured')
+      return NextResponse.json(
+        {
+          error: 'Gemini API key not configured.',
+          troubleshooting: {
+            setup_guide: 'Check GEMINI_SETUP.md for instructions.',
+            check_env: 'Ensure GEMINI_API_KEY is set in environment variables.'
+          }
+        },
+        { status: 500 }
+      )
+    }
 
     if (!apiKey) {
       console.error('GEMINI_API_KEY environment variable is not set')
@@ -112,7 +157,9 @@ export async function POST(request: NextRequest) {
     console.log(`API Key present: ${!!apiKey}`)
 
     // RAG: Find exact matching past feedback for context
+    console.log('[PREDICT] 🔍 Starting RAG search for exact matches')
     const exactMatches = await findExactMatchingFeedback(review_text)
+    console.log(`[PREDICT] ✅ Found ${exactMatches.length} exact matches for RAG`)
 
     type CorrectionPattern = {
       original_prediction: number
@@ -194,7 +241,9 @@ Return ONLY a JSON object:
     const apiUrl = getApiUrl(modelName)
     const geminiUrl = `${apiUrl}/${modelName}:generateContent?key=${apiKey}`
 
-    console.log(`Making request to: ${geminiUrl.replace(apiKey, '[API_KEY]')}`)
+    console.log(`[PREDICT] 🌐 API URL: ${apiUrl}`)
+    console.log(`[PREDICT] 🤖 Making request to Gemini API with model: ${modelName}`)
+    console.log(`[PREDICT] 📡 Request URL: ${geminiUrl.replace(apiKey, '[API_KEY]')}`)
 
     // Add timeout and better error handling
     const controller = new AbortController()
@@ -235,27 +284,47 @@ Return ONLY a JSON object:
       throw new Error(`Gemini API error (${response.status}): ${errorData}`)
     }
 
+    console.log(`[PREDICT] 📨 Received response from Gemini API (status: ${response.status})`)
+
     const data = await response.json()
+    console.log(`[PREDICT] 📄 Response data keys:`, Object.keys(data))
+
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+      console.log('[PREDICT] ❌ Invalid response structure:', data)
+      throw new Error('Invalid response structure from Gemini API')
+    }
+
     const content = data.candidates[0].content.parts[0].text
+    console.log(`[PREDICT] 📝 Raw response content: "${content.substring(0, 200)}..."`)
 
     // Extract JSON from response
     let result
     try {
+      console.log('[PREDICT] 🔍 Attempting direct JSON parse')
       result = JSON.parse(content)
+      console.log('[PREDICT] ✅ Direct JSON parse successful')
     } catch {
+      console.log('[PREDICT] 🔍 Direct parse failed, trying regex extraction')
       // Try to find JSON in the response
       const jsonMatch = content.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         result = JSON.parse(jsonMatch[0])
+        console.log('[PREDICT] ✅ Regex JSON extraction successful')
       } else {
+        console.log('[PREDICT] ❌ Could not find JSON in response')
         throw new Error('Could not parse JSON from response')
       }
     }
 
+    console.log(`[PREDICT] 📊 Parsed result:`, result)
+
     // Validate result
     if (!result.predicted_stars || result.predicted_stars < 1 || result.predicted_stars > 5) {
+      console.log(`[PREDICT] ❌ Invalid rating: ${result.predicted_stars}`)
       throw new Error('Invalid rating in response')
     }
+
+    console.log(`[PREDICT] ✅ Validation passed - rating: ${result.predicted_stars}`)
 
     // Generate prediction ID for feedback tracking
     const prediction_id = randomUUID()
@@ -281,7 +350,9 @@ Return ONLY a JSON object:
       suggestions: suggestions
     })
   } catch (error: any) {
-    console.error('Prediction error:', error)
+    console.error('[PREDICT] ❌ Prediction error:', error)
+    console.error('[PREDICT] ❌ Error stack:', error.stack)
+    console.error('[PREDICT] ❌ Error message:', error.message)
 
     // Provide helpful error messages based on error type
     let errorMessage = 'Failed to generate prediction'
