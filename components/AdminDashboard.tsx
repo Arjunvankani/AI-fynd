@@ -86,9 +86,12 @@ export default function AdminDashboard() {
       const fetchTime = Date.now() - startTime
       console.log(`📊 [DASHBOARD] Fetched ${feedbackRes.data.feedback?.length || 0} feedback entries in ${fetchTime}ms`)
       console.log(`📊 [DASHBOARD] Analytics response:`, analyticsRes.data)
+      console.log(`📊 [DASHBOARD] Analytics data:`, analyticsRes.data?.analytics)
 
       setFeedbackData(feedbackRes.data.feedback || [])
-      setAnalytics(analyticsRes.data.analytics || null)
+      const analyticsData = analyticsRes.data.analytics || null
+      console.log('🔍 [DASHBOARD] Setting analytics data:', analyticsData)
+      setAnalytics(analyticsData)
 
       console.log(`📊 [DASHBOARD] Set analytics:`, analyticsRes.data.analytics)
       setLastUpdated(new Date())
@@ -308,6 +311,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats Cards */}
+      {console.log('🎯 [DASHBOARD] Rendering analytics:', analytics)}
       {analytics && (
         <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-6">
           <div className="bg-white rounded-xl shadow-lg p-6">

@@ -204,6 +204,9 @@ pip install -r requirements.txt  # For the Jupyter notebooks
 # Set up your API key
 echo "GROQ_API_KEY=your-key-here" > .env.local
 
+# For production deployment, set up Vercel KV (see VERCEL_KV_SETUP.md)
+# npm run migrate-to-kv  # Migrate existing data to KV
+
 # Run the web app
 npm run dev
 

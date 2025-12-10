@@ -1,0 +1,40 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Feedback {
+  id              String   @id @default(cuid())
+  prediction_id   String?
+  review_text     String
+  predicted_rating Int
+  user_rating     Int
+  corrected       Boolean  @default(false)
+  feedback_type   String   // 'user_correction' or 'admin_feedback'
+  ai_summary      String?
+  recommended_actions String[] // JSON array
+  feedback_weight Float?  // 0.4 for user, 0.6 for admin
+  timestamp       DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@map("feedback")
+}
+
+model TrainingData {
+  id             String   @id @default(cuid())
+  review_text    String
+  predicted_rating Int
+  user_rating    Int
+  feedback_type  String
+  feedback_weight Float?
+  created_at     DateTime @default(now())
+
+  @@map("training_data")
+}

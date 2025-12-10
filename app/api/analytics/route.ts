@@ -1,49 +1,50 @@
 import { NextResponse } from 'next/server'
-import fs from 'fs/promises'
-import path from 'path'
-import { kv } from '@vercel/kv'
-
-const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
-
-// Check if Vercel KV is available (for production data persistence)
-const USE_KV = !!(process.env.KV_URL || process.env.KV_REST_API_URL || process.env.KV_REST_API_TOKEN)
-
-console.log('[STORAGE] Analytics USE_KV:', USE_KV, 'KV_URL:', !!process.env.KV_URL, 'KV_REST_API_URL:', !!process.env.KV_REST_API_URL)
+import { pool } from '../../../lib/db'
 
 async function readFeedback(): Promise<any[]> {
-  console.log('[ANALYTICS] Reading feedback data...')
-  console.log('[ANALYTICS] USE_KV:', USE_KV)
+  console.log('[ANALYTICS] Reading feedback data from PostgreSQL...')
 
-  if (USE_KV) {
+  try {
+    const result = await pool.query('SELECT * FROM feedback ORDER BY timestamp DESC')
+    console.log(`[DB] Analytics retrieved ${result.rows.length} feedback entries`)
+
+    // Log some sample data for debugging
+    if (result.rows.length > 0) {
+      console.log('[DB] Sample feedback entry:', JSON.stringify(result.rows[0], null, 2))
+    }
+
+    return result.rows
+  } catch (error) {
+    console.error('[DB] Analytics error reading from PostgreSQL:', error)
+    console.error('[DB] Error details:', error instanceof Error ? error.message : 'Unknown error')
+
+    // Try to create table if it doesn't exist
     try {
-      console.log('[KV] Analytics reading feedback from Vercel KV')
-      const feedback = await kv.get('feedback_data') || []
-      const feedbackArray = Array.isArray(feedback) ? feedback : []
-      console.log(`[KV] Analytics retrieved ${feedbackArray.length} feedback entries`)
+      console.log('[DB] Attempting to create feedback table...')
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS feedback (
+          id TEXT PRIMARY KEY,
+          prediction_id TEXT,
+          review_text TEXT NOT NULL,
+          predicted_rating INTEGER NOT NULL,
+          user_rating INTEGER NOT NULL,
+          corrected BOOLEAN DEFAULT FALSE,
+          feedback_type TEXT NOT NULL,
+          ai_summary TEXT,
+          recommended_actions TEXT[] DEFAULT '{}',
+          feedback_weight REAL,
+          timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        )
+      `)
+      console.log('[DB] Created feedback table')
 
-      // Log some sample data for debugging
-      if (feedbackArray.length > 0) {
-        console.log('[KV] Sample feedback entry:', JSON.stringify(feedbackArray[0], null, 2))
-      }
-
-      return feedbackArray
-    } catch (error) {
-      console.error('[KV] Analytics error reading from KV:', error)
-      console.error('[KV] Error details:', error instanceof Error ? error.message : 'Unknown error')
+      // Return empty array since table was just created
+      return []
+    } catch (createError) {
+      console.error('[DB] Failed to create table:', createError)
       return []
     }
-  }
-
-  // Fallback to file storage for local development
-  console.log('[ANALYTICS] Using file storage fallback')
-  try {
-    const data = await fs.readFile(FEEDBACK_FILE, 'utf-8')
-    const feedback = JSON.parse(data)
-    console.log(`[FILE] Analytics read ${feedback.length} entries from file`)
-    return feedback
-  } catch (error) {
-    console.log('[FILE] Error reading feedback file:', error instanceof Error ? error.message : 'Unknown error')
-    return []
   }
 }
 
