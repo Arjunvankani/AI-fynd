@@ -311,7 +311,6 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats Cards */}
-      {console.log('🎯 [DASHBOARD] Rendering analytics:', analytics)}
       {analytics && (
         <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-6">
           <div className="bg-white rounded-xl shadow-lg p-6">
