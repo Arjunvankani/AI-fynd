@@ -4,11 +4,13 @@
 
 Hey there! 👋 Welcome to my Yelp rating prediction system. This project was born out of a take-home assessment for Fynd AI, but honestly, it turned into something I'm genuinely proud of. Let me walk you through it!
 
-[![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen)](https://ai-fynd-arjuns-projects-9e82a67f.vercel.app/)
+[![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen)](https://ai-fynd-git-master-arjuns-projects-9e82a67f.vercel.app?_vercel_share=sybUOVlOFo0ldTs0YrcaiXQf5CBbRjNA)
 [![GitHub](https://img.shields.io/badge/GitHub-Repo-blue)](https://github.com/Arjunvankani/AI-fynd/)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5)](https://www.linkedin.com/in/arjunvankani/)
 
 ---
+
+Link : https://ai-fynd-git-master-arjuns-projects-9e82a67f.vercel.app?_vercel_share=sybUOVlOFo0ldTs0YrcaiXQf5CBbRjNA
 
 ## 🎯 What's This All About?
 
