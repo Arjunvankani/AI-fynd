@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '../../../lib/db'
+import fs from 'fs/promises'
+import path from 'path'
+import { kv } from '@vercel/kv'
+
+// Storage config: prefer Vercel KV when available, otherwise local file
+const USE_KV = !!(process.env.KV_URL || process.env.KV_REST_API_URL || process.env.KV_REST_API_TOKEN)
+const FEEDBACK_FILE = path.join(process.cwd(), 'data', 'feedback.json')
 
 interface FeedbackRequest {
   prediction_id?: string  // Optional for admin submissions
@@ -475,4 +482,3 @@ export async function GET() {
     )
   }
 }
-
