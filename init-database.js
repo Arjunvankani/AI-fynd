@@ -75,7 +75,7 @@ async function initDatabase() {
           item.corrected || false,
           item.feedback_type,
           item.ai_summary || null,
-          JSON.stringify(item.recommended_actions || []),
+          item.recommended_actions || [],
           item.feedback_weight || (item.feedback_type === 'admin_feedback' ? 0.6 : 0.4)
         ])
       }

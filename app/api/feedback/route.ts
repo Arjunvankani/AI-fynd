@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       body.corrected || false,
       body.feedback_type,
       finalAiSummary || null,
-      JSON.stringify(finalRecommendedActions || []),
+      finalRecommendedActions || [],
       body.feedback_weight || (body.feedback_type === 'admin_feedback' ? 0.6 : 0.4)
     ])
 
