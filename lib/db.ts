@@ -1,11 +1,22 @@
-import { PrismaClient } from '@prisma/client'
+import 'dotenv/config'
+import { Pool } from 'pg'
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
+// Shared Postgres pool for Next.js route handlers
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: false }
+    : undefined
+})
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient()
+pool.on('connect', () => {
+  console.log('[DB] Connected to PostgreSQL')
+})
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+pool.on('error', (err) => {
+  console.error('[DB] Unexpected error on idle client', err)
+})
 
-export default prisma
+export const query = (text: string, params?: any[]) => pool.query(text, params)
+
+export default pool
