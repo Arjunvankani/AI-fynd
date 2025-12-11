@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { pool } from '../../../lib/db'
 
+// Ensure this route always runs dynamically (uses request.url)
+export const dynamic = 'force-dynamic'
+
 async function readFeedback(): Promise<any[]> {
   console.log('[ANALYTICS] Reading feedback data from PostgreSQL...')
 
@@ -235,4 +238,3 @@ export async function GET(request: Request) {
     )
   }
 }
-

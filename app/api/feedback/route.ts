@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
 
     // For admin submissions, we might need to generate a prediction
     let finalPredictedRating = body.predicted_rating
+    // Provide sensible defaults so admin dashboard never shows empty placeholders
     let finalAiSummary = body.ai_summary
     let finalRecommendedActions = body.recommended_actions
 
@@ -51,6 +52,20 @@ export async function POST(request: NextRequest) {
       console.log('🤖 Generating prediction for admin review...')
       // TODO: Add prediction generation logic here
       finalPredictedRating = body.user_rating // Temporary fallback
+    }
+
+    // Fallback summary/actions when client doesn't send them
+    if (!finalAiSummary) {
+      const preview = body.review_text?.substring(0, 140) || ''
+      finalAiSummary = `Review rated ${body.user_rating} stars. ${preview}${preview.length === 140 ? '...' : ''}`
+    }
+
+    if (!finalRecommendedActions || finalRecommendedActions.length === 0) {
+      finalRecommendedActions = [
+        'Review and respond to the customer feedback',
+        'Address any concerns mentioned in the review',
+        'Monitor similar feedback patterns for trends'
+      ]
     }
 
     // Insert feedback into database
@@ -70,7 +85,7 @@ export async function POST(request: NextRequest) {
       body.corrected || false,
       body.feedback_type,
       finalAiSummary || null,
-      JSON.stringify(finalRecommendedActions || []),
+      finalRecommendedActions || [],
       body.feedback_weight || (body.feedback_type === 'admin_feedback' ? 0.6 : 0.4)
     ])
 
